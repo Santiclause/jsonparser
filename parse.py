@@ -12,6 +12,7 @@ class StringParseException(ParseException):
         self.string = string
         self.err = err
 
+# use .parse() or .capture_parse() (just a wrapper around parse() that returns the exception instead in the event that it fails)
 class Parser:
     def __init__(self, string):
         self.string = string
@@ -35,7 +36,7 @@ class Parser:
         start = pos
         while True:
             pos += 1
-            if pos > self.len:
+            if pos >= self.len:
                 self.throw("EOF reached before string ended", start)
             c = self.string[pos]
             if not escaped and c == '"':
@@ -54,36 +55,49 @@ class Parser:
     # starts with "-0123456789". "cannot" start with 0 if following character isn't a "." or "e"
     def parse_number(self, pos):
         start = pos
+        parse_func = int
+        if self.string[pos] == '-' and (pos == self.len - 1 or self.string[pos + 1] not in '0123456789'):
+            self.throw("invalid numeric value", start)
         while True:
             pos += 1
-            if pos > self.len:
+            if pos >= self.len:
                 break
             c = self.string[pos]
             if c not in "0123456789":
                 break
         if c == '.':
+            parse_func = float
+            deci_start = pos
             while True:
                 pos += 1
-                if pos > self.len:
+                if pos >= self.len:
                     break
                 c = self.string[pos]
                 if c not in "0123456789":
                     break
-        if c in "eE" and pos < self.len:
+            if pos == deci_start + 1:
+                self.throw("invalid numeric value", start)
+        if c in "eE":
+            parse_func = float
+            if pos == self.len - 1:
+                self.throw("invalid numeric value", start)
             if self.string[pos + 1] in "-+":
                 pos += 1
+            expo_start = pos
             while True:
                 pos += 1
-                if pos > self.len:
+                if pos >= self.len:
                     break
                 c = self.string[pos]
                 if c not in "0123456789":
                     break
+            if pos == expo_start + 1:
+                self.throw("invalid numeric value", start)
         if c not in "0123456789,]}" and not c.isspace():
             self.throw("Number parse error", start)
         if self.string[start] == "0" and self.string[start + 1] not in ".eE" and pos - start > 1:
             self.throw("Leading zero found in number parse", start)
-        return json.loads(self.string[start:pos]), pos - 1
+        return parse_func(self.string[start:pos]), pos - 1
 
     def parse_literal(self, pos):
         start = pos
@@ -107,7 +121,7 @@ class Parser:
     def parse_value(self, pos):
         start = pos
         while True:
-            if pos > self.len:
+            if pos >= self.len:
                 self.throw("EOF reached while trying to find value", start)
             c = self.string[pos]
             if not c.isspace():
@@ -128,7 +142,7 @@ class Parser:
         obj = {}
         while True:
             pos += 1
-            if pos > self.len:
+            if pos >= self.len:
                 self.throw("EOF reached while parsing object", start)
             c = self.string[pos]
             if c.isspace():
@@ -140,7 +154,7 @@ class Parser:
                 key, pos = self.parse_string(pos)
                 while True:
                     pos += 1
-                    if pos > self.len:
+                    if pos >= self.len:
                         self.throw("EOF reached while parsing object member", member_start)
                     c = self.string[pos]
                     if c.isspace():
@@ -153,7 +167,7 @@ class Parser:
                 member_end = pos
                 while True:
                     pos += 1
-                    if pos > self.len:
+                    if pos >= self.len:
                         self.throw("EOF reached while searching for next object member", member_end)
                     c = self.string[pos]
                     if c.isspace():
@@ -172,7 +186,7 @@ class Parser:
         array = []
         while True:
             pos += 1
-            if pos > self.len:
+            if pos >= self.len:
                 self.throw("EOF reached while parsing array", start)
             c = self.string[pos]
             if c.isspace():
@@ -184,7 +198,7 @@ class Parser:
             value_end = pos
             while True:
                 pos += 1
-                if pos > self.len:
+                if pos >= self.len:
                     self.throw("EOF reached while searching for next array value", value_end)
                 c = self.string[pos]
                 if c.isspace():
